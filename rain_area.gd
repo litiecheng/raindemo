@@ -1,5 +1,6 @@
 extends Area2D
 
+export( bool ) var Passive = false
 export( Color ) var Frame_Modulate = Color( 1, 1, 1, 1 )
 export( int ) var Drop_Count = 100
 export( float ) var Drop_Angle = 90.0
@@ -148,8 +149,11 @@ func _ready():
 			shape = child.get_shape()
 			shape_transform = child.get_transform()
 			break
-	if not shape: return
-	print( "Drop shape transform: ", shape_transform )
+	if not shape:
+		Passive = true
+		print( "No drop collision shape - Passive mode" )
+	else:
+		print( "Drop shape transform: ", shape_transform )
 	
 	# create a bunch of drops
 	#var mat = Matrix32()
@@ -159,12 +163,14 @@ func _ready():
 		# speed
 		d.speed = rand_range( Min_Drop_Speed, Max_Drop_Speed )
 		# area
+		
 		d.area = Physics2DServer.area_create()
 		Physics2DServer.area_set_space( d.area, get_world_2d().get_space() )
-		Physics2DServer.area_add_shape( d.area, shape )
-		Physics2DServer.area_set_layer_mask( d.area, get_layer_mask() )
-		Physics2DServer.area_set_collision_mask( d.area, get_collision_mask() )
-		Physics2DServer.area_set_monitor_callback( d.area, d, "_on_collide" )
+		if not Passive:
+			Physics2DServer.area_add_shape( d.area, shape )
+			Physics2DServer.area_set_layer_mask( d.area, get_layer_mask() )
+			Physics2DServer.area_set_collision_mask( d.area, get_collision_mask() )
+			Physics2DServer.area_set_monitor_callback( d.area, d, "_on_collide" )
 		# position
 		d.pos = starting_points[i] #Vector2( ( randf() * 2 - 1 ) * Hextend, ( randf() * 2 - 1 ) * Vextend )
 		shapepos( d )#, shape_transform )#mat )
