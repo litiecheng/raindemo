@@ -69,7 +69,7 @@ __meta__ = { "_edit_lock_":true }
 
 Passive = false
 Frame_Modulate = Color( 1, 1, 1, 0.247451 )
-Drop_Count = 500
+Drop_Count = 5000
 Drop_Angle = 67.5
 Min_Drop_Speed = 100.0
 Max_Drop_Speed = 150.0

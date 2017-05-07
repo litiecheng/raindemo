@@ -99,7 +99,7 @@ func _ready():
 	rain_direction = Vector2( cos( Drop_Angle * PI / 180 ), sin( Drop_Angle * PI / 180 ) )
 	rain_direction = rain_direction.normalized()
 	
-	# special points in the polygon
+	# special points in the polygon where the rain starts
 	colpoly_points = _get_polygon_points( colpoly, Polygon_Point_Count )
 	colpoly_resetpoints = _get_polygon_resetpoints( colpoly_points, rain_direction * Max_Drop_Speed * 0.05, colpoly )
 	test_points = [] + colpoly_resetpoints
@@ -250,10 +250,16 @@ func _process( delta ):
 
 
 
-
-
+# Get the current camera
+onready var camera = get_node( "../TileMap/player/Camera2D" )
+onready var st = get_viewport_rect().size
 func _draw():
+	var vt = camera.get_viewport_transform()
 	for d in drops:
+		# check if this drop is to be drawn
+		if d.pos.x < ( -vt.o.x ) or d.pos.x > ( -vt.o.x + st.width ) or d.pos.y < ( -vt.o.y ) or d.pos.y > ( -vt.o.y + st.height ):
+			continue
+		# draw drop
 		draw_texture_rect_region( Drop_Texture, \
 				Rect2( d.pos, framesize ), framerects[ framesequence[ d.frame ] ], Frame_Modulate )
 	#for p in test_points:
