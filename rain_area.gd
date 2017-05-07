@@ -31,7 +31,8 @@ var shape
 var shape_transform
 var colpoly
 var colpoly_points = []
-var colpoly_resetpoints = []
+var colpoly_resetpoints = [] # list of points where the drops start
+var colpoly_endpoints = [] # list of points where the drops end
 var colpoly_ntriangles
 var colpoly_triangles = []
 #var offset
@@ -60,6 +61,7 @@ class Drop:
 	var state = 0
 	var frame = 0
 	var timer = 0.0
+	var endpos = Vector2()
 	func _on_collide( a, b, c, d, e ):
 		if a == Physics2DServer.AREA_BODY_REMOVED:
 			return
@@ -89,20 +91,24 @@ func _ready():
 		print( get_name(), ": could not find a child rain drop" )
 		return
 	
-	# compute starting points
+	# isolate colision polygon
 	colpoly = colpol.get_polygon()
-	var starting_points = _get_random_point_within_polygon( colpoly, Drop_Count )
-	Drop_Count = starting_points.size()
-	print( "Generating %d drops" % Drop_Count )
 	
 	# the rain direction
 	rain_direction = Vector2( cos( Drop_Angle * PI / 180 ), sin( Drop_Angle * PI / 180 ) )
 	rain_direction = rain_direction.normalized()
 	
-	# special points in the polygon where the rain starts
+	# take only points in the polygon where the rain starts
 	colpoly_points = _get_polygon_points( colpoly, Polygon_Point_Count )
 	colpoly_resetpoints = _get_polygon_resetpoints( colpoly_points, rain_direction * Max_Drop_Speed * 0.05, colpoly )
 	test_points = [] + colpoly_resetpoints
+	
+	# compute points where the rain ends
+	colpoly_endpoints = _get_polygon_endpoints( colpoly_resetpoints, rain_direction * Max_Drop_Speed * 0.05, colpoly )
+	
+	#print( "resetpoints: ", colpoly_resetpoints.size() )
+	#print( "starting_points: ", starting_points.size() )
+	#print( "endpoints: ", colpoly_endpoints.size() )
 	
 	var aux = Geometry.triangulate_polygon( colpoly )
 	colpoly_ntriangles = aux.size() / 3
@@ -171,8 +177,15 @@ func _ready():
 			Physics2DServer.area_set_layer_mask( d.area, get_layer_mask() )
 			Physics2DServer.area_set_collision_mask( d.area, get_collision_mask() )
 			Physics2DServer.area_set_monitor_callback( d.area, d, "_on_collide" )
+		# select a random starting point index
+		var idx = randi() % colpoly_resetpoints.size()
+		# compute random position along the way to the end point
+		var p = colpoly_resetpoints[ idx ] + randf() * ( colpoly_endpoints[ idx ] - colpoly_resetpoints[ idx ] )
+		#starting_points.append( p )
 		# position
-		d.pos = starting_points[i] #Vector2( ( randf() * 2 - 1 ) * Hextend, ( randf() * 2 - 1 ) * Vextend )
+		d.pos = p #starting_points[i] #Vector2( ( randf() * 2 - 1 ) * Hextend, ( randf() * 2 - 1 ) * Vextend )
+		d.endpos = colpoly_endpoints[ idx ]
+		#d.endpos = colpoly_endpoints[i]
 		shapepos( d )#, shape_transform )#mat )
 		drops.append( d )
 	
@@ -228,8 +241,16 @@ func _process( delta ):
 			# compute new position
 			d.pos += delta * d.speed * rain_direction
 			# check if within the polygon
-			if not _is_point_inside_polygon( d.pos, colpoly, colpoly_triangles ):
-				d.pos = colpoly_resetpoints[ randi() % colpoly_resetpoints.size() ]
+			#if not _is_point_inside_polygon( d.pos, colpoly, colpoly_triangles ):
+			#	d.pos = colpoly_resetpoints[ randi() % colpoly_resetpoints.size() ]
+			# check if reaching the end point
+			if ( sign( rain_direction.x ) > 0 and d.pos.x > d.endpos.x ) or \
+				( sign( rain_direction.x ) < 0 and d.pos.x < d.endpos.x ) or \
+				( sign( rain_direction.y ) > 0 and d.pos.y > d.endpos.y ) or \
+				( sign( rain_direction.y ) < 0 and d.pos.y < d.endpos.y ):
+				var idx = randi() % colpoly_resetpoints.size()
+				d.pos = colpoly_resetpoints[ idx ]
+				d.endpos = colpoly_endpoints[ idx ]
 			shapepos( d )
 		elif d.state == 2:
 			# play coliding animation by shifting frames
@@ -241,7 +262,10 @@ func _process( delta ):
 					# reset drop
 					d.state = 0
 					d.frame = 0
-					d.pos = colpoly_resetpoints[ randi() % colpoly_resetpoints.size() ]
+					# select a random starting point
+					var idx = randi() % colpoly_resetpoints.size()
+					d.pos = colpoly_resetpoints[ idx ]
+					d.endpos = colpoly_endpoints[ idx ]
 					shapepos( d )
 				else:
 					pass
@@ -257,13 +281,16 @@ func _draw():
 	var vt = camera.get_viewport_transform()
 	for d in drops:
 		# check if this drop is to be drawn
-		if d.pos.x < ( -vt.o.x ) or d.pos.x > ( -vt.o.x + st.width ) or d.pos.y < ( -vt.o.y ) or d.pos.y > ( -vt.o.y + st.height ):
+		if d.pos.x < ( -vt.o.x ) or d.pos.x > ( -vt.o.x + st.width ) or \
+			d.pos.y < ( -vt.o.y ) or d.pos.y > ( -vt.o.y + st.height ):
 			continue
 		# draw drop
 		draw_texture_rect_region( Drop_Texture, \
 				Rect2( d.pos, framesize ), framerects[ framesequence[ d.frame ] ], Frame_Modulate )
-	#for p in test_points:
+	#for p in colpoly_resetpoints:
 	#	draw_circle( p, 2, Color( 1, 1, 0, 1 ) )
+	#for p in colpoly_endpoints:
+	#	draw_circle( p, 2, Color( 1, 0, 0, 1 ) )
 
 
 
@@ -272,7 +299,7 @@ func _draw():
 
 
 
-func _get_random_point_within_polygon( poly, N = 1 ):
+func _get_random_point_within_polygon_old( poly, N = 1 ):
 	var MaxTrials = 10 * N
 	# generate a set of random points within a collision polygon.
 	#var poly = get_node("CollisionPolygon2D").get_polygon()
@@ -365,4 +392,21 @@ func _is_point_inside_polygon( p, poly, triangles ):
 	if not inside:
 		inside = _is_point_inside_polygon_full( p, poly )
 	return inside
+
+
+func _get_polygon_endpoints( spoints, direction, poly ):
+	var endpoints = []
+	# run each drop from the starting points to the end of the polygon
+	for p in spoints:
+		# test point
+		var x = p + Vector2()
+		var finished = false
+		#print( "testing ", x )
+		while not finished:
+			x += direction
+			if not _is_point_inside_polygon_full( x, poly ):
+				endpoints.append( x )
+				#print( "found endpoint ", x )
+				finished = true
+	return endpoints
 	
